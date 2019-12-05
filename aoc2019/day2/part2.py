@@ -1,6 +1,6 @@
 from itertools import product
 
-from . import Program
+from aoc2019.intcode import Program
 
 
 def main():

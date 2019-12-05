@@ -2,9 +2,8 @@ from aoc2019.intcode import Program
 
 
 def main():
-    prog = Program.from_file("data/2.txt")
+    prog = Program.from_file("data/5.txt")
     prog.execute()
-    print(prog.program[0])
 
 
 if __name__ == "__main__":
