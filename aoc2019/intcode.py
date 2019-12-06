@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 Flags = Tuple[bool, bool, bool]
 
@@ -6,8 +6,11 @@ OP_ADD = 1
 OP_MUL = 2
 OP_INPUT = 3
 OP_OUTPUT = 4
+OP_JUMP_IF_TRUE = 5
+OP_JUMP_IF_FALSE = 6
+OP_LT = 7
+OP_EQ = 8
 OP_EXIT = 99
-PC_INCR = 4
 
 
 class IllegalInstruction(Exception):
@@ -33,20 +36,28 @@ class Program:
         op, flags = decode_opcode(self.program[self.program_counter])
         while op != OP_EXIT:
             if op == OP_ADD:
-                self._add(flags)
+                self._calc(lambda a, b: a + b, flags)
             elif op == OP_MUL:
-                self._mul(flags)
+                self._calc(lambda a, b: a * b, flags)
             elif op == OP_INPUT:
                 self._input()
             elif op == OP_OUTPUT:
                 self._output(flags)
+            elif op == OP_JUMP_IF_TRUE:
+                self._jump(True, flags)
+            elif op == OP_JUMP_IF_FALSE:
+                self._jump(False, flags)
+            elif op == OP_LT:
+                self._calc(lambda a, b: 1 if a < b else 0, flags)
+            elif op == OP_EQ:
+                self._calc(lambda a, b: 1 if a == b else 0, flags)
             else:
                 raise IllegalInstruction(
                     f"Illegal instruction: {op} ({flags=}, {self.program_counter=})"
                 )
             op, flags = decode_opcode(self.program[self.program_counter])
 
-    def _add(self, flags: Flags):
+    def _calc(self, func: Callable[[int, int], int], flags: Flags):
         a_pos = self.program_counter + 1
         b_pos = self.program_counter + 2
         dst_pos = self.program_counter + 3
@@ -55,29 +66,32 @@ class Program:
         a = self.program[a_pos] if flags[0] else self.program[self.program[a_pos]]
         b = self.program[b_pos] if flags[1] else self.program[self.program[b_pos]]
         dst = self.program[dst_pos]
-        self.program[dst] = a + b
-
-    def _mul(self, flags: Flags):
-        a_pos = self.program_counter + 1
-        b_pos = self.program_counter + 2
-        dst_pos = self.program_counter + 3
-        self.program_counter += 4
-
-        a = self.program[a_pos] if flags[0] else self.program[self.program[a_pos]]
-        b = self.program[b_pos] if flags[1] else self.program[self.program[b_pos]]
-        dst = self.program[dst_pos]
-        self.program[dst] = a * b
+        self.program[dst] = func(a, b)
 
     def _input(self):
         dst_pos = self.program_counter + 1
         self.program[self.program[dst_pos]] = int(input("> "))
         self.program_counter += 2
 
-    def _output(self, flags):
+    def _output(self, flags: Flags):
         src_pos = self.program_counter + 1
         src = self.program[src_pos] if flags[0] else self.program[self.program[src_pos]]
         print(src)
         self.program_counter += 2
+
+    def _jump(self, when: bool, flags: Flags):
+        test_pos = self.program_counter + 1
+        dst_pos = self.program_counter + 2
+
+        test = (
+            self.program[test_pos] if flags[0] else self.program[self.program[test_pos]]
+        )
+        dst = self.program[dst_pos] if flags[1] else self.program[self.program[dst_pos]]
+
+        if bool(test) is when:
+            self.program_counter = dst
+        else:
+            self.program_counter += 3
 
     @classmethod
     def from_file(cls, path: str):

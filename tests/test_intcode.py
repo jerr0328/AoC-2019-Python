@@ -3,6 +3,56 @@ from typing import List, Tuple
 import pytest
 from aoc2019.intcode import Program, decode_opcode
 
+CMP_8_PROG = [
+    3,
+    21,
+    1008,
+    21,
+    8,
+    20,
+    1005,
+    20,
+    22,
+    107,
+    8,
+    21,
+    20,
+    1006,
+    20,
+    31,
+    1106,
+    0,
+    36,
+    98,
+    0,
+    0,
+    1002,
+    21,
+    125,
+    20,
+    4,
+    20,
+    1105,
+    1,
+    46,
+    104,
+    999,
+    1105,
+    1,
+    46,
+    1101,
+    1000,
+    1,
+    20,
+    4,
+    20,
+    1105,
+    1,
+    46,
+    98,
+    99,
+]
+
 
 @pytest.mark.parametrize(
     "given,expected",
@@ -38,10 +88,37 @@ def test_decode_opcode(opcode: int, expected: Tuple[int, Tuple[bool, bool, bool]
 
 
 def test_simple_input_output(capsys, monkeypatch):
-    with monkeypatch.context() as m:
-        m.setattr("builtins.input", lambda _: "123")
-        prog = Program([3, 0, 4, 0, 99])
-        prog.execute()
-        assert [123, 0, 4, 0, 99] == prog.program
-        captured = capsys.readouterr()
-        assert "123\n" == captured.out
+    monkeypatch.setattr("builtins.input", lambda _: "123")
+    prog = Program([3, 0, 4, 0, 99])
+    prog.execute()
+    assert [123, 0, 4, 0, 99] == prog.program
+    captured = capsys.readouterr()
+    assert "123\n" == captured.out
+
+
+@pytest.mark.parametrize(
+    "program,given,expected",
+    [
+        ([3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8], 8, 1),
+        ([3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8], 9, 0),
+        ([3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8], 7, 1),
+        ([3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8], 9, 0),
+        ([3, 3, 1108, -1, 8, 3, 4, 3, 99], 8, 1),
+        ([3, 3, 1108, -1, 8, 3, 4, 3, 99], 9, 0),
+        ([3, 3, 1107, -1, 8, 3, 4, 3, 99], 7, 1),
+        ([3, 3, 1107, -1, 8, 3, 4, 3, 99], 9, 0),
+        ([3, 12, 6, 12, 15, 1, 13, 14, 13, 4, 13, 99, -1, 0, 1, 9], 0, 0),
+        ([3, 12, 6, 12, 15, 1, 13, 14, 13, 4, 13, 99, -1, 0, 1, 9], 5, 1),
+        ([3, 3, 1105, -1, 9, 1101, 0, 0, 12, 4, 12, 99, 1], 0, 0),
+        ([3, 3, 1105, -1, 9, 1101, 0, 0, 12, 4, 12, 99, 1], -1, 1),
+        (CMP_8_PROG, 5, 999),
+        (CMP_8_PROG, 8, 1000),
+        (CMP_8_PROG, 10, 1001),
+    ],
+)
+def test_via_io(capsys, monkeypatch, program, given, expected):
+    monkeypatch.setattr("builtins.input", lambda _: str(given))
+    prog = Program(program)
+    prog.execute()
+    captured = capsys.readouterr()
+    assert f"{expected}\n" == captured.out
