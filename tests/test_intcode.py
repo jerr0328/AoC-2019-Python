@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 import pytest
-from aoc2019.intcode import Program, decode_opcode
+from aoc2019.intcode import ExitException, Program, decode_opcode
 
 CMP_8_PROG = [
     3,
@@ -119,3 +119,15 @@ def test_interactive_input_output(capsys, monkeypatch):
 def test_non_interactive_mode(program, given, expected):
     prog = Program(program, interactive=False, inputs=[given])
     assert [expected] == prog.execute()
+
+
+def test_input_blocks():
+    input_prog = [3, 0, 4, 0, 99]
+    prog = Program(input_prog, interactive=False, return_on_input=True)
+    prog.execute()
+    assert input_prog == prog.program
+    assert [] == prog.outputs
+    prog.inputs.append(7)
+    with pytest.raises(ExitException):
+        prog.execute()
+    assert [7] == prog.outputs

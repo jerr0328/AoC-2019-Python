@@ -13,7 +13,11 @@ OP_EQ = 8
 OP_EXIT = 99
 
 
-class IllegalInstruction(Exception):
+class IllegalInstructionException(Exception):
+    pass
+
+
+class ExitException(Exception):
     pass
 
 
@@ -33,12 +37,14 @@ class Program:
         program: List[int],
         interactive: bool = True,
         inputs: Optional[List[int]] = None,
+        return_on_input: bool = False,
     ):
         self.program: List[int] = program
         self.program_counter = 0
         self.interactive = interactive
         self.outputs = []
-        self.inputs = inputs
+        self.inputs = inputs or []
+        self.return_on_input = return_on_input
         if interactive:
             self._output_func = print
             self._input_func = lambda: int(input("> "))
@@ -54,6 +60,8 @@ class Program:
             elif op == OP_MUL:
                 self._calc(lambda a, b: a * b, flags)
             elif op == OP_INPUT:
+                if self.return_on_input and not len(self.inputs):
+                    break
                 self._input()
             elif op == OP_OUTPUT:
                 self._output(flags)
@@ -66,10 +74,12 @@ class Program:
             elif op == OP_EQ:
                 self._calc(lambda a, b: 1 if a == b else 0, flags)
             else:
-                raise IllegalInstruction(
+                raise IllegalInstructionException(
                     f"Illegal instruction: {op} ({flags=}, {self.program_counter=})"
                 )
             op, flags = decode_opcode(self.program[self.program_counter])
+        if self.return_on_input and op == OP_EXIT:
+            raise ExitException()
         return self.outputs
 
     def _calc(self, func: Callable[[int, int], int], flags: Flags):
