@@ -1,4 +1,4 @@
-from typing import Callable, List, Tuple
+from typing import Callable, List, Optional, Tuple
 
 Flags = Tuple[bool, bool, bool]
 
@@ -28,9 +28,23 @@ def decode_opcode(opcode: int) -> Tuple[int, Flags]:
 
 
 class Program:
-    def __init__(self, program: List[int]):
+    def __init__(
+        self,
+        program: List[int],
+        interactive: bool = True,
+        inputs: Optional[List[int]] = None,
+    ):
         self.program: List[int] = program
         self.program_counter = 0
+        self.interactive = interactive
+        self.outputs = []
+        self.inputs = inputs
+        if interactive:
+            self._output_func = print
+            self._input_func = lambda: int(input("> "))
+        else:
+            self._output_func = lambda x: self.outputs.append(x)
+            self._input_func = lambda: self.inputs.pop(0)
 
     def execute(self):
         op, flags = decode_opcode(self.program[self.program_counter])
@@ -56,6 +70,7 @@ class Program:
                     f"Illegal instruction: {op} ({flags=}, {self.program_counter=})"
                 )
             op, flags = decode_opcode(self.program[self.program_counter])
+        return self.outputs
 
     def _calc(self, func: Callable[[int, int], int], flags: Flags):
         a_pos = self.program_counter + 1
@@ -70,13 +85,13 @@ class Program:
 
     def _input(self):
         dst_pos = self.program_counter + 1
-        self.program[self.program[dst_pos]] = int(input("> "))
+        self.program[self.program[dst_pos]] = self._input_func()
         self.program_counter += 2
 
     def _output(self, flags: Flags):
         src_pos = self.program_counter + 1
         src = self.program[src_pos] if flags[0] else self.program[self.program[src_pos]]
-        print(src)
+        self._output_func(src)
         self.program_counter += 2
 
     def _jump(self, when: bool, flags: Flags):

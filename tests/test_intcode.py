@@ -87,9 +87,9 @@ def test_decode_opcode(opcode: int, expected: Tuple[int, Tuple[bool, bool, bool]
     assert expected == decode_opcode(opcode)
 
 
-def test_simple_input_output(capsys, monkeypatch):
+def test_interactive_input_output(capsys, monkeypatch):
     monkeypatch.setattr("builtins.input", lambda _: "123")
-    prog = Program([3, 0, 4, 0, 99])
+    prog = Program([3, 0, 4, 0, 99], interactive=True)
     prog.execute()
     assert [123, 0, 4, 0, 99] == prog.program
     captured = capsys.readouterr()
@@ -116,9 +116,6 @@ def test_simple_input_output(capsys, monkeypatch):
         (CMP_8_PROG, 10, 1001),
     ],
 )
-def test_via_io(capsys, monkeypatch, program, given, expected):
-    monkeypatch.setattr("builtins.input", lambda _: str(given))
-    prog = Program(program)
-    prog.execute()
-    captured = capsys.readouterr()
-    assert f"{expected}\n" == captured.out
+def test_non_interactive_mode(program, given, expected):
+    prog = Program(program, interactive=False, inputs=[given])
+    assert [expected] == prog.execute()
