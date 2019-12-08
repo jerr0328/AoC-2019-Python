@@ -3,3 +3,4 @@ isort
 pre-commit
 pytest
 shapely
+numpy
