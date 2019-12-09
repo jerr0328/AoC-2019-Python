@@ -1,6 +1,6 @@
-from typing import Callable, List, Optional, Tuple
-
-Flags = Tuple[bool, bool, bool]
+from collections import defaultdict
+from enum import Enum
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 OP_ADD = 1
 OP_MUL = 2
@@ -10,6 +10,7 @@ OP_JUMP_IF_TRUE = 5
 OP_JUMP_IF_FALSE = 6
 OP_LT = 7
 OP_EQ = 8
+OP_ADJUST_REL_BASE = 9
 OP_EXIT = 99
 
 
@@ -21,12 +22,21 @@ class ExitException(Exception):
     pass
 
 
+class ModeEnum(Enum):
+    POSITION = 0
+    IMMEDIATE = 1
+    RELATIVE = 2
+
+
+Flags = Tuple[ModeEnum, ModeEnum, ModeEnum]
+
+
 def decode_opcode(opcode: int) -> Tuple[int, Flags]:
     op = int(opcode % 100)
 
-    first = bool(int(opcode / 100 % 10))
-    second = bool(int(opcode / 1000 % 10))
-    third = bool(int(opcode / 10000 % 10))
+    first = ModeEnum(int(opcode / 100 % 10))
+    second = ModeEnum(int(opcode / 1000 % 10))
+    third = ModeEnum(int(opcode / 10000 % 10))
 
     return op, (first, second, third)
 
@@ -34,17 +44,20 @@ def decode_opcode(opcode: int) -> Tuple[int, Flags]:
 class Program:
     def __init__(
         self,
-        program: List[int],
+        program: Union[List[int], Dict[int, int]],
         interactive: bool = True,
         inputs: Optional[List[int]] = None,
         return_on_input: bool = False,
     ):
-        self.program: List[int] = program
+        self.program: Dict[int, int] = defaultdict(
+            int, enumerate(program)
+        ) if isinstance(program, list) else program
         self.program_counter = 0
         self.interactive = interactive
         self.outputs = []
         self.inputs = inputs or []
         self.return_on_input = return_on_input
+        self.relative_base = 0
         if interactive:
             self._output_func = print
             self._input_func = lambda: int(input("> "))
@@ -62,7 +75,7 @@ class Program:
             elif op == OP_INPUT:
                 if self.return_on_input and not len(self.inputs):
                     break
-                self._input()
+                self._input(flags)
             elif op == OP_OUTPUT:
                 self._output(flags)
             elif op == OP_JUMP_IF_TRUE:
@@ -73,6 +86,8 @@ class Program:
                 self._calc(lambda a, b: 1 if a < b else 0, flags)
             elif op == OP_EQ:
                 self._calc(lambda a, b: 1 if a == b else 0, flags)
+            elif op == OP_ADJUST_REL_BASE:
+                self._adjust_rel_base(flags)
             else:
                 raise IllegalInstructionException(
                     f"Illegal instruction: {op} ({flags=}, {self.program_counter=})"
@@ -88,35 +103,53 @@ class Program:
         dst_pos = self.program_counter + 3
         self.program_counter += 4
 
-        a = self.program[a_pos] if flags[0] else self.program[self.program[a_pos]]
-        b = self.program[b_pos] if flags[1] else self.program[self.program[b_pos]]
-        dst = self.program[dst_pos]
-        self.program[dst] = func(a, b)
+        self._store(
+            dst_pos,
+            func(self._load(a_pos, flags[0]), self._load(b_pos, flags[1])),
+            flags[2],
+        )
 
-    def _input(self):
+    def _adjust_rel_base(self, flags: Flags):
+        self.relative_base += self._load(self.program_counter + 1, flags[0])
+        self.program_counter += 2
+
+    def _input(self, flags: Flags):
         dst_pos = self.program_counter + 1
-        self.program[self.program[dst_pos]] = self._input_func()
+        self._store(dst_pos, self._input_func(), flags[0])
         self.program_counter += 2
 
     def _output(self, flags: Flags):
         src_pos = self.program_counter + 1
-        src = self.program[src_pos] if flags[0] else self.program[self.program[src_pos]]
-        self._output_func(src)
+        self._output_func(self._load(src_pos, flags[0]))
         self.program_counter += 2
 
     def _jump(self, when: bool, flags: Flags):
         test_pos = self.program_counter + 1
         dst_pos = self.program_counter + 2
 
-        test = (
-            self.program[test_pos] if flags[0] else self.program[self.program[test_pos]]
-        )
-        dst = self.program[dst_pos] if flags[1] else self.program[self.program[dst_pos]]
-
-        if bool(test) is when:
-            self.program_counter = dst
+        if bool(self._load(test_pos, flags[0])) is when:
+            self.program_counter = self._load(dst_pos, flags[1])
         else:
             self.program_counter += 3
+
+    def _load(self, address: int, mode: ModeEnum) -> int:
+        if mode == ModeEnum.IMMEDIATE:
+            return self.program[address]
+        elif mode == ModeEnum.POSITION:
+            return self.program[self.program[address]]
+        elif mode == ModeEnum.RELATIVE:
+            return self.program[self.relative_base + self.program[address]]
+
+    def _store(self, address: int, value: int, mode: ModeEnum):
+        if mode == ModeEnum.POSITION:
+            dst = self.program[address]
+        elif mode == ModeEnum.RELATIVE:
+            dst = self.relative_base + self.program[address]
+        else:
+            raise IllegalInstructionException(
+                f"Cannot store using address {address} in immediate mode"
+            )
+        self.program[dst] = value
 
     @classmethod
     def from_file(cls, path: str):
